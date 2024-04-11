@@ -238,7 +238,75 @@ for epoch in range(epochs):
         opt.step()
         opt.zero_grad()
 
-print(loss_func(model(x_train), y_train))
+#print(loss_func(model(x_train), y_train))
 
 
 # Add validation
+train_ds = TensorDataset(x_train, y_train)
+train_dl = DataLoader(train_ds, batch_size=bs, shuffle=True)
+
+valid_ds = TensorDataset(x_valid, y_valid)
+valid_dl = DataLoader(valid_ds, batch_size=bs * 2) # this doesn't need backpropagation and thus takes less memory
+
+
+model, opt = get_model()
+
+for epoch in range(epochs):
+
+    model.train()
+    for xb, yb in train_dl:
+        pred = model(xb)
+        loss = loss_func(pred, yb)
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+
+    model.eval()
+    with torch.no_grad():
+        valid_loss = sum(loss_func(model(xb), yb) for xb, yb in valid_dl)
+
+    #print(epoch, valid_loss / len(valid_dl))
+
+
+# Create fit() and get_data()
+def loss_batch(model, loss_func, xb, yb, opt=None):
+    loss = loss_func(model(xb), yb)
+
+    if opt is not None:
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+
+    return loss.item(), len(xb)
+
+
+def fit(epochs, model, loss_func, opt, train_dl, valid_dl):
+    for epoch in range(epochs):
+        model.train()
+        for xb, yb in train_dl:
+            loss_batch(model, loss_func, xb, yb, opt)
+
+        model.eval()
+        with torch.no_grad():
+            losses, nums = zip(
+                *[loss_batch(model, loss_func, xb, yb) for xb, yb in valid_dl]
+            )
+            val_loss = np.sum(np.multiply(losses, nums)) / np.sum(nums)
+
+            print(epoch, val_loss)
+
+
+def get_data(train_ds, valid_ds, bs):
+    return (
+        DataLoader(train_ds, batch_size=bs, shuffle=True),
+        DataLoader(valid_ds, batch_size=bs * 2)
+    )
+
+
+# obtaining the data loaders and fitting the model
+train_dl, valid_dl = get_data(train_ds, valid_ds, bs)
+model, opt = get_model()
+fit(epochs, model, loss_func, opt, train_dl, valid_dl)
+
+
+# Switch to CNN
